@@ -3,27 +3,15 @@ AWS.config.update({ region: "ap-northeast-1" });
 AWS.config.apiVersions = {
   ec2: "2016-11-15"
 };
-const ec2 = new AWS.EC2();
+const EC2 = require("./ec2");
+const ec2 = new EC2(AWS);
 
 exports.handler = async event => {
   console.log(JSON.stringify(event, null, 2));
 
-  const params = {
-    Filters: [
-      {
-        Name: "is-public",
-        Values: [
-          "false"
-          /* more items */
-        ]
-      }
-      /* more items */
-    ]
-  };
-
   try {
     //AMI一覧取得
-    const result = await ec2.describeImages(params).promise();
+    const result = await ec2.describeImages();
     let images = result.Images;
 
     //名前、id、作成時刻を抽出
@@ -46,7 +34,7 @@ exports.handler = async event => {
     });
 
     //アカウント内に存在するEC2インスタンスのAMI IDを取得
-    const instances = await ec2.describeInstances().promise();
+    const instances = await ec2.describeInstances();
     const imagesOfInstances = instances.Reservations.map(reservation => {
       for (let i = 0; i < reservation.Instances.length; i++) {
         return reservation.Instances[i].ImageId;
@@ -59,6 +47,7 @@ exports.handler = async event => {
       }
     }
 
+    console.log(images);
     return {
       statusCode: 200,
       headers: {

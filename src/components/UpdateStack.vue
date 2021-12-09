@@ -1,40 +1,15 @@
 <template>
   <div class="main__container">
     <modal
-      confirmationMessage="下記のAMIでCloudFormationを実行してもよろしいですか？"
+      :confirmationMessage="confirmationMessage"
       :target="imageName"
+      :method-name="methodName"
       v-show="modal"
-      @get-modal-result="getModalResult"
+      @execute-method="executeMethod"
     ></modal>
 
     <h3 class="main__container--heading">CloudFormation実行</h3>
-
-    <div class="main__container--radio-area">
-      <label
-        class="main__container--radio-label"
-        @click="isCheckedOldVersion = false"
-      >
-        <input
-          type="radio"
-          name="version"
-          id="latest-version"
-          class="main__container--radio"
-          checked
-        />最新版をリリース
-      </label>
-      <label
-        class="main__container--radio-label"
-        @click="isCheckedOldVersion = true"
-      >
-        <input
-          type="radio"
-          name="version"
-          class="main__container--radio"
-        />バージョンを戻す
-      </label>
-    </div>
-
-    <div v-show="isCheckedOldVersion">
+    <div class="main__container--select-image">
       <!-- AMI選択セレクトボックス -->
       <select id="select-image" class="main__container--select ">
         <option hidden>AMIを選択</option>
@@ -44,16 +19,53 @@
       </select>
     </div>
 
+    <!-- 変更セット作成ボタン -->
+    <button
+      type="button"
+      class="main__container--btn main__container--pre-update-btn"
+      id="create-change-set-btn"
+      @click="
+        showModal('選択したAMIで変更セットを作成してもよろしいですか？'),
+          (methodName = 'createChangeSet')
+      "
+    >
+      変更セット作成
+    </button>
+
+    <!-- ドリフト検出ボタン -->
+    <button
+      type="button"
+      class="main__container--btn main__container--pre-update-btn"
+      id="detect-drift-btn"
+      @click="
+        showModal('ドリフトの検出を行いますか？'), (methodName = 'detectDrift')
+      "
+    >
+      ドリフト検出
+    </button>
+
     <!-- 更新ボタン -->
     <button
       type="button"
-      class="main__container--btn main__container--update-btn"
-      @click="showModal()"
+      class="main__container--update-btn main__container--btn"
+      id="update-stack-btn"
+      @click="
+        showModal('選択したAMIでCloudFormationスタックを更新しますか？'),
+          (methodName = 'updateStack')
+      "
     >
       更新
     </button>
 
-    <span class="main__container--update-stack-error">{{ error }}</span>
+    <!-- 作成状況表示 -->
+    <div class="main__container--show-status">
+      <span v-if="state === 'pending'">
+        <img src="../assets/waiting.gif" class="main__container--waiting-img" />
+      </span>
+      <span :style="{ color }" class="main__container-uptate-message">{{
+        updateMessage
+      }}</span>
+    </div>
 
     <!-- 更新状況表示 -->
     <div class="main__container--status">
@@ -65,13 +77,13 @@
         <img
           src="../assets/reload.png"
           class="main__container--reload-img"
-          @click="checkStackState()"
+          @click="checkStackStateOnClick()"
           v-show="isLoading === false"
         />
         <img
           src="../assets/half_circle.png"
           class="main__container--reload-wait-img"
-          @click="checkStackState()"
+          @click="checkStackStateOnClick()"
           v-show="isLoading === true"
         />
       </div>
@@ -102,113 +114,369 @@ export default {
       modal: false,
       imageName: "",
       imageId: "",
-      isCheckedOldVersion: false,
       stackName: "",
+      confirmationMessage: "",
       isLoading: false,
-      error: "",
       events: [],
       messages: [],
-      color: ""
+      color: "",
+      methodName: "",
+      state: "",
+      updateMessage: ""
     };
   },
   props: ["images"],
   methods: {
-    showModal() {
-      this.error = "";
-      if (!this.isCheckedOldVersion) {
-        this.imageName = this.images[this.images.length - 1].imageName;
-        this.imageId = this.images[this.images.length - 1].imageId;
+    /**
+     * 入力チェックを行い、モーダルを表示するメソッド
+     */
+    showModal(message) {
+      this.updateMessage = "";
+      if (message === "ドリフトの検出を行いますか？") {
+        this.imageName = "";
       } else {
         const select = document.getElementById("select-image");
         const selectedIndex = select.selectedIndex;
         this.imageName = select.options[selectedIndex].text;
         this.imageId = select.value;
         if (this.imageName === "AMIを選択") {
-          this.error = "AMIを選択してください。";
+          this.changeState("error", "AMIを選択してください。", "#ff0000");
           return;
         }
       }
+      this.confirmationMessage = message;
       this.modal = true;
     },
-    async getModalResult(result) {
+    /**
+     * モーダルでの選択が「はい」だった場合に、対象メソッドを実行するメソッド
+     * クリックしたボタンからのメッセージをもとに、実行するメソッドを判別
+     */
+    async executeMethod(yes, executeMethod) {
       this.modal = false;
-      if (result) {
-        await this.updateStack();
+      if (yes) {
+        if (executeMethod === "createChangeSet") {
+          await this.createChangeSet();
+        } else if (executeMethod === "detectDrift") {
+          await this.detectDrift();
+        } else {
+          await this.updateStack();
+        }
       }
     },
-    //CloudFormationを実行するメソッド
-    async updateStack() {
+    /**
+     * 変更セットを作成するメソッド
+     * スタックの更新前に削除予定のリソースがないかをチェックするために使用
+     */
+    async createChangeSet() {
+      this.$disableButton([
+        "create-change-set-btn",
+        "detect-drift-btn",
+        "update-stack-btn"
+      ]);
+      this.changeState("pending", "変更セット作成中", "#0064c8");
+
       try {
-        //最新バージョンの場合
-        if (!this.isCheckedOldVersion) {
-          this.pushEvent(
-            new Date().toLocaleString({ timeZone: "Asia/Tokyo" }),
-            "Update request accepted",
-            "#0064c8"
+        const result = await this.requestTocreateChangeSet();
+        const changeSet = await this.describeChangeSet(result.Id);
+        if (changeSet === "FAILED") {
+          this.changeState(
+            "error",
+            "変更セットの作成に失敗しました。CloudFormationコンソールでスタックを確認してください。",
+            "#ff0000"
           );
+          this.$enableButton([
+            "create-change-set-btn",
+            "detect-drift-btn",
+            "update-stack-btn"
+          ]);
+          return;
+        }
 
-          //変更セット実行リクエスト
-          const res = await this.requestToExecuteChangeSet();
-          //ドリフトの検出または変更セットで削除が検出されたら実行しない
-          if (res == "DRIFTED") {
-            this.pushEvent(
-              new Date().toLocaleString({ timeZone: "Asia/Tokyo" }),
-              "Detected stack drift. Check resource configuration",
+        for (let i = 0; i < changeSet.Changes.length; i++) {
+          if (changeSet.Changes[i].ResourceChange.Action === "Remove") {
+            this.changeState(
+              "error",
+              `次のリソースが削除される予定です。${changeSet.Changes[i].ResourceChange.LogicalResourceId}\n意図しない削除の場合、CloudFormationコンソールでスタックの詳細を確認してください。削除を許容する場合は、変更セットを作成せずに更新を行ってください。`,
               "#ff0000"
             );
+            this.$enableButton([
+              "create-change-set-btn",
+              "detect-drift-btn",
+              "update-stack-btn"
+            ]);
             return;
-          } else if (res === "Remove") {
-            this.pushEvent(
-              new Date().toLocaleString({ timeZone: "Asia/Tokyo" }),
-              "The resource will be deleted. Please check the template.",
-              "#ff0000"
-            );
-            return;
-          } else {
-            this.stackName = res;
           }
-        } else {
-          //バージョンを戻す場合
-          this.pushEvent(
-            new Date().toLocaleString({ timeZone: "Asia/Tokyo" }),
-            "Rollback request accepted",
-            "#0064c8"
-          );
+        }
 
-          //以前のバージョンのAMIでスタックを更新するリクエスト
-          const res = await this.requestToRollbackStack();
-          //ドリフトを検出した場合更新しない
-          if (res == "DRIFTED") {
-            this.pushEvent(
-              new Date().toLocaleString({ timeZone: "Asia/Tokyo" }),
-              "Detected stack drift. Check resource configuration",
-              "#ff0000"
-            );
-            return;
-          } else {
-            this.stackName = res;
+        this.changeState(
+          "complete",
+          "変更セットを作成しました。削除予定のリソースはありません。",
+          "#00c800"
+        );
+        this.$enableButton([
+          "create-change-set-btn",
+          "detect-drift-btn",
+          "update-stack-btn"
+        ]);
+      } catch (err) {
+        console.log(err);
+        this.changeState(
+          "error",
+          `変更セットの作成中にエラーが発生しました。CloudFormationコンソールでスタックの確認してください。${err}`,
+          "#ff0000"
+        );
+      }
+      this.$enableButton([
+        "create-change-set-btn",
+        "detect-drift-btn",
+        "update-stack-btn"
+      ]);
+    },
+    /**
+     * 変更セットの作成状況を監視するメソッド
+     */
+    async describeChangeSet(changeSetId) {
+      try {
+        let changeSet = await this.requestTodescribeChangeSet(changeSetId);
+        if (changeSet.Status === "CREATE_COMPLETE") {
+          return changeSet;
+        }
+        while (changeSet.Status !== "CREATE_COMPLETE") {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          changeSet = await this.requestTodescribeChangeSet(changeSetId);
+          if (changeSet.Status === "CREATE_COMPLETE") {
+            return changeSet;
+          } else if (changeSet.Status === "FAILED") {
+            return changeSet.Status;
           }
         }
       } catch (err) {
-        this.error = err;
+        console.log("describeChangeSetでエラーが発生しました。");
+        throw err;
       }
     },
-    requestToExecuteChangeSet() {
-      return new Promise((resolve, reject) => {
-        this.$api
-          .post(this.$apiName, "/executechangeset")
-          .then(res => {
-            resolve(res);
-          })
-          .catch(err => {
-            reject(err);
-          });
-      });
+    /**
+     * ドリフトの検出結果をチェックするメソッド
+     */
+    async detectDrift() {
+      this.$disableButton([
+        "create-change-set-btn",
+        "detect-drift-btn",
+        "update-stack-btn"
+      ]);
+      this.changeState("pending", "ドリフト検出中", "#0064c8");
+
+      try {
+        const driftResult = await this.requestToDetectStackDrift();
+        const driftStatus = await this.describeStackDriftDetectionStatus(
+          driftResult.StackDriftDetectionId
+        );
+        if (driftStatus !== "IN_SYNC") {
+          this.changeState(
+            "error",
+            "ドリフトが検出されました。変更されたリソースがあります。意図しない変更の場合、変更を元に戻してください。",
+            "#ff0000"
+          );
+        } else {
+          this.changeState(
+            "complete",
+            "ドリフトは検出されませんでした。",
+            "#00c800"
+          );
+        }
+        this.$enableButton([
+          "create-change-set-btn",
+          "detect-drift-btn",
+          "update-stack-btn"
+        ]);
+      } catch (err) {
+        console.log(err);
+        this.changeState(
+          "error",
+          `ドリフトの検出中にエラーが発生しました。CloudFormationコンソールでスタックのドリフトの詳細を確認してください。${err}`,
+          "#ff0000"
+        );
+        this.$enableButton([
+          "create-change-set-btn",
+          "detect-drift-btn",
+          "update-stack-btn"
+        ]);
+      }
     },
-    requestToRollbackStack() {
+    /**
+     * ドリフトの検出状況を監視するメソッド
+     */
+    async describeStackDriftDetectionStatus(stackDriftDetectionId) {
+      try {
+        let result = await this.requestToDescribeStackDriftDetectionStatus(
+          stackDriftDetectionId
+        );
+        if (result.DetectionStatus === "DETECTION_COMPLETE") {
+          return result.StackDriftStatus;
+        }
+        while (result.DetectionStatus !== "DETECTION_COMPLETE") {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          result = await this.requestToDescribeStackDriftDetectionStatus(
+            stackDriftDetectionId
+          );
+        }
+        if (result.DetectionStatus === "DETECTION_COMPLETE") {
+          return result.StackDriftStatus;
+        } else if (result.DetectionStatus === "DETECTION_FAILED") {
+          return result.DetectionStatus;
+        }
+      } catch (err) {
+        console.log(
+          "describeStackDriftDetectionStatusでエラーが発生しました。"
+        );
+        throw err;
+      }
+    },
+    /**
+     * CloudFormationスタックを更新するメソッド
+     * 変更セットがある場合は変更セットを使用し、ない場合は直接更新となる
+     */
+    async updateStack() {
+      this.$disableButton([
+        "create-change-set-btn",
+        "detect-drift-btn",
+        "update-stack-btn"
+      ]);
+      this.changeState("pending", "更新中", "#0064c8");
+
+      try {
+        this.stackName = await this.requestToUpdateStack();
+        const isCompleted = await this.describeStackEvents();
+        if (!isCompleted) {
+          this.changeState(
+            "error",
+            "CloudFormationスタックの更新中にエラーが発生しました。CloudFormationコンソールでスタックを確認してください。",
+            "#ff0000"
+          );
+        } else {
+          this.changeState(
+            "complete",
+            "CloudFormationスタックの更新が完了しました。",
+            "#00c800"
+          );
+        }
+      } catch (err) {
+        console.log(err);
+        this.changeState(
+          "error",
+          `CloudFormationスタックの更新中にエラーが発生しました。CloudFormationコンソールでスタックを確認してください。${err}`,
+          "#ff0000"
+        );
+      }
+      this.$enableButton([
+        "create-change-set-btn",
+        "detect-drift-btn",
+        "update-stack-btn"
+      ]);
+    },
+    async describeStackEvents() {
+      try {
+        let result = await this.requestToDescribeStackEvents();
+        if (result.StackEvents.length !== 0) {
+          let latestEvent = `${result.StackEvents[0].LogicalResourceId}:${result.StackEvents[0].ResourceStatus}`;
+          if (latestEvent === `${this.stackName}:UPDATE_COMPLETE`) {
+            return true;
+          }
+          while (latestEvent !== `${this.stackName}:UPDATE_COMPLETE`) {
+            await new Promise(resultolve => setTimeout(resultolve, 30000));
+            result = await this.requestToDescribeStackEvents();
+            latestEvent = `${result.StackEvents[0].LogicalResourceId}:${result.StackEvents[0].ResourceStatus}`;
+            if (latestEvent === `${this.stackName}:UPDATE_COMPLETE`) {
+              return true;
+            } else if (
+              latestEvent.includes("FAILED") ||
+              latestEvent.includes("ROLLBACK")
+            ) {
+              return false;
+            }
+          }
+        }
+      } catch (err) {
+        console.log(err);
+        this.changeState("error", err, "#ff0000");
+      }
+    },
+    /**
+     * 更新アイコンクリック時にスタックの更新状況を取得、表示するメソッド。
+     */
+    async checkStackStateOnClick() {
+      this.isLoading = true;
+
+      try {
+        const result = await this.requestToDescribeStackEvents();
+        if (this.stackName == "") {
+          this.stackName = result.StackEvents[0].StackName;
+        }
+        if (result.StackEvents.length !== 0) {
+          //リリース日のイベントのみ抽出する(yyyy-MM-dd)
+          let now = new Date();
+          now = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+
+          const state = [];
+          const time = [];
+          for (let i = 0; i < result.StackEvents.length; i++) {
+            let timestamp = new Date(result.StackEvents[i].Timestamp);
+            timestamp = `${timestamp.getFullYear()}-${timestamp.getMonth() +
+              1}-${timestamp.getDate()}`;
+            if (now === timestamp) {
+              state.push(
+                `${result.StackEvents[i].LogicalResourceId} : ${result.StackEvents[i].ResourceStatus}`
+              );
+              time.push(result.StackEvents[i].Timestamp);
+            }
+          }
+
+          for (let i = 0; i < state.length; i++) {
+            //更新失敗
+            if (state[i].includes("FAILED") || state[i].includes("ROLLBACK")) {
+              this.pushEvent(time[i], state[i], "#ff0000");
+            } else if (state[i] === `${this.stackName} : UPDATE_COMPLETE`) {
+              //更新完了
+              this.pushEvent(time[i], state[i], "#00c800");
+            } else {
+              //更新中
+              this.pushEvent(time[i], state[i], "#0064c8");
+            }
+          }
+
+          if (state[0] === `${this.stackName} : UPDATE_COMPLETE`) {
+            this.changeState(
+              "complete",
+              "CloudFormationスタックの更新が完了しました。",
+              "#00c800"
+            );
+          } else if (
+            state[0].includes("FAILED") ||
+            state[0].includes("ROLLBACK")
+          ) {
+            this.changeState(
+              "error",
+              "CloudFormationスタックの更新中にエラーが発生しました。CloudFormationコンソールでスタックを確認してください。",
+              "#ff0000"
+            );
+          } else {
+            this.changeState("pending", "更新中", "#0064c8");
+          }
+        }
+      } catch (err) {
+        console.log(err);
+        this.changeState(
+          "error",
+          `CloudFormationスタックの更新中にエラーが発生しました。CloudFormationコンソールでスタックを確認してください。${err}`,
+          "#ff0000"
+        );
+      }
+      this.isLoading = false;
+    },
+    requestTocreateChangeSet() {
       return new Promise((resolve, reject) => {
         this.$api
-          .post(this.$apiName, "/rollbackstack", {
+          .post(this.$apiName, "/createchangeset", {
             body: this.imageId
           })
           .then(res => {
@@ -219,37 +487,14 @@ export default {
           });
       });
     },
-    async checkStackState() {
-      this.isLoading = true;
-      try {
-        const res = await this.requestToGetStackState();
-        if (res !== "Event does not exist") {
-          this.stackName = res.stackName;
-          for (let i = 0; i < res.state.length; i++) {
-            //更新失敗
-            if (
-              res.state[i].includes("FAILED") ||
-              res.state[i].includes("ROLLBACK")
-            ) {
-              this.pushEvent(res.time[i], res.state[i], "#ff0000");
-            } else if (res.state[i] === `${this.stackName} : UPDATE_COMPLETE`) {
-              //更新完了
-              this.pushEvent(res.time[i], res.state[i], "#00c800");
-            } else {
-              //更新中
-              this.pushEvent(res.time[i], res.state[i], "#0064c8");
-            }
-          }
-        }
-      } catch (err) {
-        this.error = err;
-      }
-      this.isLoading = false;
-    },
-    requestToGetStackState() {
+    requestTodescribeChangeSet(changeSetId) {
       return new Promise((resolve, reject) => {
         this.$api
-          .get(this.$apiName, "/getstackstate")
+          .get(this.$apiName, "/describechangeset", {
+            queryStringParameters: {
+              changeSetId
+            }
+          })
           .then(res => {
             resolve(res);
           })
@@ -258,7 +503,60 @@ export default {
           });
       });
     },
-    //日付順にソートして更新メッセージを蓄積するメソッド
+    requestToDetectStackDrift() {
+      return new Promise((resolve, reject) => {
+        this.$api
+          .get(this.$apiName, "/detectstackdrift")
+          .then(res => {
+            resolve(res);
+          })
+          .catch(err => {
+            reject(err);
+          });
+      });
+    },
+    requestToDescribeStackDriftDetectionStatus(stackDriftDetectionId) {
+      return new Promise((resolve, reject) => {
+        this.$api
+          .get(this.$apiName, "/describestackdriftdetectionstatus", {
+            queryStringParameters: {
+              stackDriftDetectionId
+            }
+          })
+          .then(res => {
+            resolve(res);
+          })
+          .catch(err => {
+            reject(err);
+          });
+      });
+    },
+    requestToUpdateStack() {
+      return new Promise((resolve, reject) => {
+        this.$api
+          .post(this.$apiName, "/updatestack", {
+            body: this.imageId
+          })
+          .then(res => {
+            resolve(res);
+          })
+          .catch(err => {
+            reject(err);
+          });
+      });
+    },
+    requestToDescribeStackEvents() {
+      return new Promise((resolve, reject) => {
+        this.$api
+          .get(this.$apiName, "/describestackevents")
+          .then(res => {
+            resolve(res);
+          })
+          .catch(err => {
+            reject(err);
+          });
+      });
+    },
     pushEvent(time, event, color) {
       if (!this.events.includes(`${time}${event}`)) {
         this.events.push(`${time}${event}`);
@@ -268,40 +566,39 @@ export default {
           return new Date(b.date) - new Date(a.date);
         });
       }
+    },
+    changeState(state, message, color) {
+      this.state = state;
+      this.updateMessage = message;
+      this.color = color;
     }
   }
 };
 </script>
 
 <style scoped>
-.main__container--radio-area {
+.main__container--select-image {
   margin: 35px auto;
   margin-bottom: 10px;
 }
 
-.main__container--radio-label {
-  display: flex;
-  justify-content: left;
-  width: 155px;
-  margin: 10px auto;
-}
-
-.main__container--radio {
-  width: 15px;
-  height: 15px;
-  position: relative;
-  right: 5px;
+.main__container--pre-update-btn {
+  margin: 30px;
+  margin-bottom: 30px;
+  display: inline-block;
+  width: 130px;
 }
 
 .main__container--update-btn {
-  margin: 30px auto;
-  margin-bottom: 10px;
+  margin: 10px auto;
+  width: 80px;
 }
 
-.main__container--update-stack-error {
-  display: inline-block;
-  margin: 10px;
-  color: #ff0000;
+.main__container--show-status {
+  margin-top: 30px;
+}
+
+.main__container-uptate-message {
   font-weight: bold;
 }
 

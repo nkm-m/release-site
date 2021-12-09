@@ -3,32 +3,24 @@ AWS.config.update({ region: "ap-northeast-1" });
 AWS.config.apiVersions = {
   cloudformation: "2010-05-15"
 };
-const CloudFormationAPI = require("./CloudFormationAPI");
-const cloudformation = new CloudFormationAPI(AWS);
+const CloudFormation = require("./cloudformation");
+const cloudformation = new CloudFormation(AWS);
 
 exports.handler = async event => {
   console.log(JSON.stringify(event, null, 2));
 
   try {
-    const changeSet = await cloudformation.listChangeSets();
-    if (changeSet.Summaries.length !== 0) {
-      await cloudformation.executeChangeSet(
-        changeSet.Summaries[0].ChangeSetId,
-        changeSet.Summaries[0].StackName
-      );
-    } else {
-      const imageId = JSON.parse(event.body);
-      await cloudformation.updateStack(imageId);
-    }
+    const stackEvents = await cloudformation.describeStackEvents();
 
+    console.log(stackEvents);
     return {
       statusCode: 200,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS,POST"
+        "Access-Control-Allow-Methods": "OPTIONS,GET"
       },
-      body: JSON.stringify(process.env.STACKNAME)
+      body: JSON.stringify(stackEvents)
     };
   } catch (err) {
     console.log(err);
@@ -37,7 +29,7 @@ exports.handler = async event => {
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS,POST"
+        "Access-Control-Allow-Methods": "OPTIONS,GET"
       },
       body: JSON.stringify(err)
     };

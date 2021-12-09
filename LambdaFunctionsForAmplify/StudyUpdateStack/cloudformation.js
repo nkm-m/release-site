@@ -1,11 +1,11 @@
-module.exports = class CloudFormationAPI {
+module.exports = class CloudFormation {
   constructor(AWS) {
     this.cloudformation = new AWS.CloudFormation();
   }
 
   async listChangeSets() {
     const params = {
-      StackName: process.env.StackName /* required */,
+      StackName: process.env.StackName /* required */
       //NextToken: 'STRING_VALUE',
     };
     try {
@@ -22,7 +22,7 @@ module.exports = class CloudFormationAPI {
     const params = {
       ChangeSetName /* required */,
       //ClientRequestToken: 'STRING_VALUE',
-      StackName,
+      StackName
     };
     try {
       await this.cloudformation.executeChangeSet(params).promise();
@@ -47,10 +47,10 @@ module.exports = class CloudFormationAPI {
       Parameters: [
         {
           ParameterKey: "Ec2ImageId",
-          ParameterValue: imageId,
+          ParameterValue: imageId
           // ResolvedValue: 'STRING_VALUE',
           // UsePreviousValue: true || false,
-        },
+        }
         /* more items */
       ],
       // ResourceTypes: [
@@ -74,7 +74,7 @@ module.exports = class CloudFormationAPI {
       // StackPolicyURL: 'STRING_VALUE',
       // TemplateBody: 'STRING_VALUE',
       // TemplateURL: 'STRING_VALUE',
-      UsePreviousTemplate: true,
+      UsePreviousTemplate: true
     };
 
     try {

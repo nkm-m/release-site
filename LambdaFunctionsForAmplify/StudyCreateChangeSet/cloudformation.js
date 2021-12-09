@@ -21,11 +21,11 @@ module.exports = class CloudFormation {
       // ],
       Parameters: [
         {
-          ParameterKey: 'Ec2ImageId',
-          ParameterValue: imageId,
+          ParameterKey: "Ec2ImageId",
+          ParameterValue: imageId
           // ResolvedValue: 'STRING_VALUE',
           // UsePreviousValue: true || false,
-        },
+        }
         /* more items */
       ],
       // ResourceTypes: [
@@ -64,7 +64,7 @@ module.exports = class CloudFormation {
       // ],
       // TemplateBody: 'STRING_VALUE',
       // TemplateURL: 'STRING_VALUE',
-      UsePreviousTemplate: true,
+      UsePreviousTemplate: true
     };
 
     try {
@@ -73,25 +73,7 @@ module.exports = class CloudFormation {
         .promise();
       return result;
     } catch (err) {
-      console.log('createChangeSetでエラーが発生しました。');
-      throw err;
-    }
-  }
-
-  async describeChangeSet(ChangeSetName) {
-    const params = {
-      ChangeSetName /* required */,
-      //NextToken: 'STRING_VALUE',
-      StackName: process.env.StackName,
-    };
-
-    try {
-      const result = await this.cloudformation
-        .describeChangeSet(params)
-        .promise();
-      return result;
-    } catch (err) {
-      console.log('describeChangeSetでエラーが発生しました。');
+      console.log("createChangeSetでエラーが発生しました。");
       throw err;
     }
   }

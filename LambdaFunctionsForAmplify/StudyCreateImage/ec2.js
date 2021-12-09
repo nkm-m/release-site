@@ -1,9 +1,8 @@
-module.exports = class EC2API {
+module.exports = class EC2 {
   constructor(AWS) {
     this.ec2 = new AWS.EC2();
   }
 
-  //インスタンスのidを取得するメソッド
   async describeInstances() {
     const params = {
       Filters: [
@@ -22,7 +21,6 @@ module.exports = class EC2API {
     }
   }
 
-  //AMIを作成するメソッド
   async createImage(InstanceId, Name) {
     const params = {
       InstanceId /* required */,
@@ -59,7 +57,6 @@ module.exports = class EC2API {
     }
   }
 
-  //AMIの詳細を取得するメソッド
   async describeImages(imageId) {
     const params = {
       ImageIds: [imageId]
@@ -73,7 +70,6 @@ module.exports = class EC2API {
     }
   }
 
-  //AMIとスナップショットにタグ(名前)を付けるメソッド
   async createTags(imageId, snapshotId, Value) {
     const params = {
       Resources: [imageId, snapshotId],

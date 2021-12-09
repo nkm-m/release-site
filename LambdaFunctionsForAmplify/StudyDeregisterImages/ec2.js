@@ -1,9 +1,8 @@
-module.exports = class EC2API {
+module.exports = class EC2 {
   constructor(AWS) {
     this.ec2 = new AWS.EC2();
   }
 
-  //スナップショットのidを取得するメソッド
   async describeImages(imageId) {
     const params = {
       ImageIds: [imageId]
@@ -17,7 +16,6 @@ module.exports = class EC2API {
     }
   }
 
-  //AMIを削除するメソッド
   async deregisterImage(ImageId) {
     const params = {
       ImageId /* required */,
@@ -31,7 +29,6 @@ module.exports = class EC2API {
     }
   }
 
-  //スナップショットを削除するメソッド
   async deleteSnapshot(SnapshotId) {
     const params = {
       SnapshotId /* required */,

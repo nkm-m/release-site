@@ -15,13 +15,13 @@
 <script>
 export default {
   name: "Modal",
-  props: ["confirmationMessage", "target"],
+  props: ["confirmationMessage", "target", "methodName"],
   methods: {
     returnFalse() {
-      this.$emit("get-modal-result", false);
+      this.$emit("execute-method", false, this.methodName);
     },
     returnTrue() {
-      this.$emit("get-modal-result", true);
+      this.$emit("execute-method", true, this.methodName);
     }
   }
 };

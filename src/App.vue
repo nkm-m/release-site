@@ -18,16 +18,13 @@
         </div>
       </header>
 
-      <span class="main__container--list-images-error">{{
-        listImagesError
-      }}</span>
+      <span class="main__container--list-images-error">{{ err }}</span>
 
-      <!-- リリース作業画面 -->
       <div class="main">
-        <create-images
+        <create-image
           :images="images"
           @new-images="updateImages"
-        ></create-images>
+        ></create-image>
 
         <update-stack :images="images"></update-stack>
 
@@ -43,28 +40,28 @@
 <script>
 import { Auth } from "aws-amplify";
 import { AmplifyEventBus } from "aws-amplify-vue";
-import CreateImages from "./components/CreateImages";
+import CreateImage from "./components/CreateImage";
 import UpdateStack from "./components/UpdateStack.vue";
 import DeregisterImages from "./components/DeregisterImages.vue";
 
 export default {
   name: "app",
   components: {
-    CreateImages,
+    CreateImage,
     UpdateStack,
     DeregisterImages
   },
   data() {
     return {
       signedIn: false,
-      listImagesError: "",
-      images: [],
       authConfig: {
         //アカウント作成は非表示
         signInConfig: {
           isSignUpDisplayed: false
         }
-      }
+      },
+      images: [],
+      err: ""
     };
   },
   async beforeCreate() {
@@ -83,9 +80,11 @@ export default {
   created: async function() {
     window.addEventListener("beforeunload", this.confirmSave);
     try {
+      //ログイン状態の確認
       await Auth.currentAuthenticatedUser();
       this.signedIn = true;
     } catch (err) {
+      //非ログイン状態
       this.signedIn = false;
       return;
     }
@@ -94,8 +93,7 @@ export default {
       //AMI一覧を取得
       this.images = await this.listImages();
     } catch (err) {
-      console.log(err);
-      this.listImagesError = err;
+      this.err = err;
     }
   },
   destroyed() {

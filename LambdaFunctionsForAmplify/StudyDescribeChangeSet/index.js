@@ -1,27 +1,27 @@
 const AWS = require("aws-sdk");
 AWS.config.update({ region: "ap-northeast-1" });
 AWS.config.apiVersions = {
-  ec2: "2016-11-15"
+  cloudformation: "2010-05-15"
 };
-const ec2 = new AWS.EC2();
+const CloudFormation = require("./cloudformation");
+const cloudformation = new CloudFormation(AWS);
 
 exports.handler = async event => {
   console.log(JSON.stringify(event, null, 2));
-  const imageId = event.queryStringParameters.imageId;
-  const params = {
-    ImageIds: [imageId]
-  };
 
+  const changeSetId = event.queryStringParameters.changeSetId;
   try {
-    const result = await ec2.describeImages(params).promise();
+    const changeSet = await cloudformation.describeChangeSet(changeSetId);
+
+    console.log(changeSet);
     return {
       statusCode: 200,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS,GET"
+        "Access-Control-Allow-Methods": "OPTIONS,POST"
       },
-      body: JSON.stringify(result.Images[0].State)
+      body: JSON.stringify(changeSet)
     };
   } catch (err) {
     console.log(err);
@@ -30,7 +30,7 @@ exports.handler = async event => {
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS,GET"
+        "Access-Control-Allow-Methods": "OPTIONS,POST"
       },
       body: JSON.stringify(err)
     };

@@ -2,18 +2,15 @@ import Vue from "vue";
 import App from "./App.vue";
 import axios from "axios";
 import VueAxios from "vue-axios";
-//Amplifyの設定
 import Amplify, * as AmplifyModules from "aws-amplify";
 import { AmplifyPlugin } from "aws-amplify-vue";
 import aws_exports from "./aws-exports";
 import { API } from "aws-amplify";
 Amplify.configure(aws_exports);
-//プロジェクト名
-Vue.prototype.$project = "Study";
+Vue.prototype.$project = "<Project Name>";
 //API GatewayのAPI名
-Vue.prototype.$apiName = "StudyApiReleaseSite";
+Vue.prototype.$apiName = "<API Name>";
 Vue.prototype.$api = API;
-Vue.prototype.$slackWebhookUrl = "";
 //ログイン関連の日本語化
 const messageResource = {
   ja: {
@@ -31,26 +28,32 @@ const messageResource = {
     "Send Code": "送信"
   }
 };
+AmplifyModules.I18n.putVocabularies(messageResource);
 Vue.prototype.$notifySlack = async function(text, icon_emoji) {
   const payload = {
     username: `${this.$project} ReleaseSite Notification`,
     text,
     icon_emoji
   };
-  await this.axios.post(this.$slackWebhookUrl, JSON.stringify(payload));
+  await this.axios.post(
+    "Slack Incoming WebHook URL",
+    JSON.stringify(payload)
+  );
 };
 Vue.prototype.$disableButton = function(target) {
-  const btn = document.getElementById(target);
-  btn.disabled = true;
-  btn.style.cursor = "not-allowed";
+  for (let i = 0; i < target.length; i++) {
+    const btn = document.getElementById(target[i]);
+    btn.disabled = true;
+    btn.style.cursor = "not-allowed";
+  }
 };
 Vue.prototype.$enableButton = function(target) {
-  const btn = document.getElementById(target);
-  btn.disabled = false;
-  btn.style.cursor = "pointer";
+  for (let i = 0; i < target.length; i++) {
+    const btn = document.getElementById(target[i]);
+    btn.disabled = false;
+    btn.style.cursor = "pointer";
+  }
 };
-
-AmplifyModules.I18n.putVocabularies(messageResource);
 Vue.config.productionTip = false;
 Vue.use(VueAxios, axios);
 Vue.use(AmplifyPlugin, AmplifyModules);

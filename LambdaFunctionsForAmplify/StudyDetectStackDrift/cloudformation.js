@@ -1,4 +1,4 @@
-module.exports = class CloudFormationAPI {
+module.exports = class CloudFormation {
   constructor(AWS) {
     this.cloudformation = new AWS.CloudFormation();
   }
@@ -18,21 +18,6 @@ module.exports = class CloudFormationAPI {
       return result;
     } catch (err) {
       console.log("detectStackDriftでエラーが発生しました。");
-      throw err;
-    }
-  }
-
-  async describeStackDriftDetectionStatus(StackDriftDetectionId) {
-    const params = {
-      StackDriftDetectionId /* required */
-    };
-    try {
-      const result = await this.cloudformation
-        .describeStackDriftDetectionStatus(params)
-        .promise();
-      return result;
-    } catch (err) {
-      console.log("describeStackDriftDetectionStatusでエラーが発生しました。");
       throw err;
     }
   }

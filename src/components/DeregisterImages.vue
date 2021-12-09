@@ -1,10 +1,11 @@
 <template>
   <div class="main__container">
     <modal
-      confirmationMessage="下記のAMIを削除してもよろしいですか？"
+      :confirmationMessage="confirmationMessage"
       :target="imageName"
+      :method-name="methodName"
       v-show="modal"
-      @get-modal-result="getModalResult"
+      @execute-method="executeMethod"
     ></modal>
 
     <h3 class="main__container--heading">AMI削除</h3>
@@ -15,23 +16,31 @@
       class="main__container--select main__container--select-deregister-image"
     >
       <option hidden>AMIを選択</option>
-      <option v-for="(image, i) in images" :key="i" :value="image.imageId">{{
-        image.imageName
-      }}</option>
+      <option
+        v-for="(image, i) in images"
+        :key="i"
+        :value="image.imageId"
+        :disabled="image.disable"
+        >{{ image.imageName }}</option
+      >
     </select>
 
     <!-- 削除ボタン -->
     <button
       type="button"
+      id="deregister-images-btn"
       class="main__container--btn main__container--deregister-btn"
-      @click="showModal()"
+      @click="
+        showModal('下記のAMIを削除してもよろしいですか？'),
+          (methodName = 'deregisterImages')
+      "
     >
       AMI削除
     </button>
 
     <!-- 削除状況表示 -->
     <div>
-      <span v-if="deregistrationState === 'deregistering'">
+      <span v-if="state === 'pending'">
         <img src="../assets/waiting.gif" class="main__container--waiting-img" />
       </span>
       <span
@@ -55,35 +64,48 @@ export default {
       modal: false,
       imageName: "",
       imageId: "",
-      deregistrationState: "",
+      state: "",
+      confirmationMessage: "",
+      methodName: "",
       deregistrationMessage: "",
       color: ""
     };
   },
   props: ["images"],
   methods: {
-    showModal() {
+    /**
+     * 入力チェックを行い、モーダルを表示するメソッド
+     */
+    showModal(message) {
       this.deregistrationMessage = "";
       const selectImage = document.getElementById("deregister-image");
       const selectedIndex = selectImage.selectedIndex;
       this.imageName = this.target = selectImage.options[selectedIndex].text;
       this.imageId = selectImage.value;
       if (this.imageName === "AMIを選択") {
-        this.changeState(null, "AMIを選択してください。", "#ff0000");
+        this.changeState("error", "AMIを選択してください。", "#ff0000");
         return;
       }
+      this.confirmationMessage = message;
       this.modal = true;
     },
-    async getModalResult(result) {
+    /**
+     * モーダルでの選択が「はい」だった場合に、対象メソッドを実行するメソッド
+     */
+    async executeMethod(yes, executeMethod) {
       this.modal = false;
-      if (result) {
-        await this.deregisterImages();
+      if (yes) {
+        if (executeMethod === "deregisterImages") {
+          await this.deregisterImages();
+        }
       }
     },
+    /**
+     * AMIを削除(登録解除)するメソッド
+     */
     async deregisterImages() {
-      //待機メッセージ表示し、更新ボタンを非活性にする
-      this.changeState("deregistering", "AMIを削除しています。", "#0064c8");
-
+      this.$disableButton(["deregister-images-btn"]);
+      this.changeState("pending", "AMIを削除しています。", "#0064c8");
       try {
         await this.requestToDeregisterImages();
         this.changeState(
@@ -103,8 +125,14 @@ export default {
         //選択状態を初期化
         document.getElementById("deregister-image").selectedIndex = -1;
       } catch (err) {
-        this.deregistrationMessage = err;
+        console.log(err);
+        this.changeState(
+          "error",
+          `AMI削除中にエラーが発生しました。EC2コンソールでのAMIを確認してください。${err}`,
+          "#ff0000"
+        );
       }
+      this.$enableButton(["deregister-images-btn"]);
     },
     requestToDeregisterImages() {
       return new Promise((resolve, reject) => {
@@ -122,24 +150,14 @@ export default {
           });
       });
     },
-    changeState(state, creationMessage, color) {
-      this.deregistrationState = state;
-      this.deregistrationMessage = creationMessage;
+    /**
+     * 処理状況と表示メッセージ、フォントカラーを変更するメソッド
+     */
+    changeState(state, message, color) {
+      this.state = state;
+      this.deregistrationMessage = message;
       this.color = color;
     }
-    //AMIの活性/非活性を切り替えるメソッド
-    // disableLatestImage() {
-    //   const options = document.getElementById("deregister-image").options;
-    //   if (this.images.length > 2) {
-    //     for (let i = 1; i < options.length; i++) {
-    //       if (i < options.length - 2) {
-    //         options[i].disabled = false;
-    //       } else {
-    //         options[i].disabled = true;
-    //       }
-    //     }
-    //   }
-    // },
   }
 };
 </script>
