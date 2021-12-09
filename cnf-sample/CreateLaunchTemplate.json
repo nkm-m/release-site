@@ -1,0 +1,56 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "Ec2ImageId": {
+      "Description": "Enter the latest AMI ID",
+      "Type": "AWS::EC2::Image::Id",
+      "ConstraintDescription": "The input value is incorrect"
+    }
+  },
+  "Resources": {
+    "LaunchTemplate": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Properties": {
+        "LaunchTemplateName": "LaunchTemplate",
+        "LaunchTemplateData": {
+          "IamInstanceProfile": {
+            "Name": "<IAM Role Name>"
+          },
+          "DisableApiTermination": "false",
+          "ImageId": {
+            "Ref": "Ec2ImageId"
+          },
+          "InstanceType": "t2.micro",
+          "NetworkInterfaces": [
+            {
+              "AssociatePublicIpAddress": "true",
+              "DeleteOnTermination": "true",
+              "DeviceIndex": 0,
+              "Groups": ["<SG ID>"]
+            }
+          ],
+          "TagSpecifications": [
+            {
+              "ResourceType": "instance",
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": "<Value>"
+                }
+              ]
+            },
+            {
+              "ResourceType": "volume",
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": "<Value>"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
